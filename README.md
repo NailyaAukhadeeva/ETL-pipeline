@@ -1,4 +1,4 @@
-**Create ETL-pipeline**<br/>
+**ETL-pipeline**<br/>
 ---
 Работа выполнена: 06.2023
 ### Описание задачи<br/>
