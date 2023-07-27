@@ -77,7 +77,6 @@ def dag_n_auhadeeva_etl():
     @task()
     def extract_feed_actions():
         query = """SELECT 
-                        user_id,
                         countIf(action = 'like')  as likes,
                         countIf(action = 'view')  as views,
                         gender,
@@ -86,7 +85,7 @@ def dag_n_auhadeeva_etl():
                         toDate(time) as event_date
                     FROM simulator_20230520.feed_actions 
                     WHERE toDate(time) = today() - 1
-                    GROUP BY user_id, gender, age, os, event_date
+                    GROUP BY gender, age, os, event_date
                     format TSVWithNames"""
         df_feed_actions = ch_get_df(query=query)
         return df_feed_actions
@@ -95,7 +94,6 @@ def dag_n_auhadeeva_etl():
         query = """
             SELECT
               today() - 1 as event_date,
-              user_id,
               messages_sent,
               users_sent,
               messages_received,
@@ -132,41 +130,54 @@ def dag_n_auhadeeva_etl():
  #Объединяем таблицы
     @task
     def merge_data(df_feed_actions, df_message_actions):
-        full_df = df_feed_actions.merge(df_message_actions, how = 'outer', on = ['user_id', 'event_date', 'gender', 'os', 'age']).fillna(0)
+        full_df = df_feed_actions.merge(df_message_actions, how = 'outer', on = ['event_date', 'gender', 'os', 'age']).fillna(0)
         return full_df
     
  # срез по полу
     @task
-    def transform_gender(full_df):
-        gender_df = full_df[['gender', 'likes', 'views', 'messages_sent', 'users_sent', 'messages_received', 'users_received', 'event_date']] \
-                            .groupby('gender', as_index = False) \
-                            .sum().rename(columns={'gender':'dimension_value'}) 
+     def transform_gender(full_df):
+        gender_df = full_df[['event_date','views','likes', 'messages_received', 'messages_sent' \
+                             ,'users_received', 'users_sent', 'gender']] \
+                            .groupby(['event_date','views','likes', 'messages_received',  'messages_sent' \
+                            , 'users_received', 'users_sent', 'gender'], as_index = False) \
+                            .agg({'views':'sum','likes':'sum', 'messages_received':'sum' \
+                            , 'messages_sent':'sum', 'users_received':'sum', 'users_sent':'sum'}) \
+                            .rename(columns={'gender':'dimension_value'}) 
         gender_df['dimension'] = 'gender'
         return gender_df         
     
         
  # срез по возрасту
     @task
-    def transform_age(full_df):
-        age_df = full_df[['age', 'likes', 'views', 'messages_sent', 'users_sent', 'messages_received', 'users_received', 'event_date']] \
-                        .groupby('age', as_index = False) \
-                        .sum().rename(columns={'age':'dimension_value'}) 
+      def transform_age(full_df):
+        age_df = full_df[['event_date','views','likes', 'messages_received',  'messages_sent' \
+                          , 'users_received', 'users_sent',  'age']] \
+                          .groupby(['event_date','views','likes', 'messages_received',  'messages_sent' \
+                          , 'users_received', 'users_sent', 'age'], as_index = False) \
+                          .agg({'views':'sum','likes':'sum', 'messages_received':'sum' \
+                          , 'messages_sent':'sum', 'users_received':'sum', 'users_sent':'sum'}) \
+                          .rename(columns={'age':'dimension_value'})
         age_df['dimension'] = 'age'
         return age_df
     
  # срез по ос
     @task
     def transform_os(full_df):
-        os_df = full_df[['os', 'likes', 'views', 'messages_sent', 'users_sent', 'messages_received', 'users_received', 'event_date']] \
-                        .groupby('os', as_index = False) \
-                        .sum().rename(columns={'os':'dimension_value'}) 
+        os_df = full_df[['event_date','views','likes', 'messages_received', 'messages_sent' \
+                         , 'users_received', 'users_sent', 'os']] \
+                        .groupby(['event_date','views','likes', 'messages_received', \
+                        'messages_sent', 'users_received', 'users_sent',  'os'], as_index = False) \
+                        .agg({'views':'sum','likes':'sum', 'messages_received':'sum', \
+                        'messages_sent':'sum', 'users_received':'sum', 'users_sent':'sum'}).rename(columns={'os':'dimension_value'})
         os_df['dimension'] = 'os'
         return os_df
 
  # объединение срезова
     @task
     def contact_dimension(age_df, gender_df, os_df):
-        df_all_dimension = pd.concat([age_df, gender_df, os_df], ignore_index=True)    
+        df_all_dimension = pd.concat([age_df, gender_df, os_df], ignore_index=True)
+        df_all_dimension[['views', 'likes', 'messages_received', 'messages_sent', 'users_received', 'users_sent']] = df_all_dimension[['views', 'likes', 'messages_received', 'messages_sent', 'users_received', 'users_sent']].astype(int)
+        df_all_dimension = df_all_dimension.groupby(['event_date', 'dimension', 'dimension_value'], as_index = False).agg({'views':'sum', 'likes':'sum', 'messages_received':'sum', 'messages_sent':'sum', 'users_received':'sum', 'users_sent':'sum'})
         return df_all_dimension
 
  # выгружаем в отдельную таблицу в ClickHouse
