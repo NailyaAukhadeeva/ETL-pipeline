@@ -11,7 +11,7 @@ from airflow.operators.python import get_current_context
 
 
 # Функция для CH
-def ch_get_df(query='Select 1', host='https://clickhouse.lab.karpov.courses', user='student', password='dpo_python_2020'):
+def ch_get_df(query='Select 1', host='', user='', password=''):
     r = requests.post(host, data=query.encode("utf-8"), auth=(user, password), verify=False)
     result = pd.read_csv(StringIO(r.text), sep='\t')
     return result
@@ -52,10 +52,10 @@ create_table = """
     
 # Подключение к схеме test
 connection_test = {
-    'host': 'https://clickhouse.lab.karpov.courses',
-    'password': '656e2b0c9c',
-    'user': 'student-rw',
-    'database': 'test'
+    'host': '',
+    'password': '',
+    'user': '',
+    'database': ''
 }
 
 # Дефолтные параметры, которые прокидываются в таски
